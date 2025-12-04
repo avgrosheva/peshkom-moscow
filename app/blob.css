@@ -1,0 +1,10 @@
+.blob {
+  border-radius: 50%;
+  transition: .5s;
+}
+
+.blob[data-selected="true"] {
+  transition: .5s;
+  /* filter: hue-rotate(0deg) saturate(2) brightness(1.1); */
+  background: rgba(255, 229, 32, 0.3);
+}

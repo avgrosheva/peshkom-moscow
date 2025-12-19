@@ -1,21 +1,35 @@
-import { NextResponse } from 'next/server';
-import { generateToken } from '@/lib/jwt';
-import { setAuthCookie } from '@/lib/cookies';
-import connectDB from '@/lib/mongodb';
-import User from '@/models/User';
+import { NextRequest, NextResponse } from "next/server";
+import { generateToken } from "@/lib/jwt";
+import { setAuthCookie } from "@/lib/cookies";
+import connectDB from "@/lib/mongodb";
+import User from "@/models/User";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     await connectDB();
 
-    const { email, password, confirmPassword } = await request.json();
+    let body;
 
-    // Валидация
+    try {
+      body = await request.json();
+    } catch (e) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Некорректный формат данных (ожидается JSON).",
+        },
+        { status: 400 }
+      );
+    }
+
+    const { email, password, confirmPassword } = body;
+
+    // ВАЛИДАЦИЯ ПОЛЕЙ
     if (!email || !password || !confirmPassword) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Все поля обязательны для заполнения',
+          message: "Все поля обязательны для заполнения",
         },
         { status: 400 }
       );
@@ -25,7 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Пароли не совпадают',
+          message: "Пароли не совпадают",
         },
         { status: 400 }
       );
@@ -35,25 +49,26 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Пароль должен содержать минимум 6 символов',
+          message: "Пароль должен содержать минимум 6 символов",
         },
         { status: 400 }
       );
     }
 
-    // Проверка существующего пользователя
+    // Проверяем пользователя
     const existingUser = await User.findOne({ email });
+
     if (existingUser) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Пользователь с таким email уже существует',
+          message: "Пользователь с таким email уже существует",
         },
         { status: 400 }
       );
     }
 
-    // Создание пользователя
+    // Создаем пользователя
     const user = new User({
       email,
       password,
@@ -61,32 +76,32 @@ export async function POST(request: Request) {
 
     await user.save();
 
-    // Генерация токена
+    // Токен
     const token = generateToken({
       userId: user._id.toString(),
       email: user.email,
     });
 
-    // Установка куки
+    // Кука
     setAuthCookie(token);
 
     return NextResponse.json(
       {
         success: true,
-        message: 'Регистрация прошла успешно',
+        message: "Регистрация прошла успешно",
         user: {
-          id: user._id,
+          id: user._id.toString(),
           email: user.email,
         },
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error("Registration error:", error);
     return NextResponse.json(
       {
         success: false,
-        message: 'Ошибка сервера',
+        message: "Ошибка сервера",
       },
       { status: 500 }
     );

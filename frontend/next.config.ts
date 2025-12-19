@@ -1,21 +1,25 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    esmExternals: 'loose',
-  },
-  webpack: (config) => {
-    config.externals = [...config.externals, { ymaps3: 'ymaps3' }];
-    return config;
-  },
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '**',
-        port: '',
-        pathname: '**',
+        protocol: "https",
+        hostname: "i.pinimg.com",
       },
+      {
+        protocol: "https",
+        hostname: "cdn.culture.ru",
+      },
+      {
+        protocol: "https",
+        hostname: "must-see.top",
+      },
+      {
+        protocol: "https",
+        hostname: "*.dzeninfra.ru",
+      },
+      // если будешь добавлять ещё домены — просто дописывай сюда
     ],
   },
 };

@@ -1,268 +1,165 @@
 "use client";
-
-import "./style.css";
-import { useEffect, useMemo, useState, Dispatch, SetStateAction } from "react";
-import {
-  MapPin,
-  FlagTriangleLeft,
-  Repeat,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import { calculateDistance } from "@/lib/utils";
-import { IPlace } from "@/lib/types";
+ 
+import { useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-
-const PlaceTinder = ({
-  initialPlaces,
-  setStep,
-}: {
+import { PointsContext } from "@/context/PointsContext";
+import { IPlace } from "@/lib/types";
+ 
+interface PlaceTinderProps {
+  setStep: (step: number) => void;
   initialPlaces: IPlace[];
-  setStep: Dispatch<SetStateAction<number>>;
-}) => {
+}
+ 
+export default function PlaceTinder({
+  setStep,
+  initialPlaces,
+}: PlaceTinderProps) {
   const router = useRouter();
-
-  const [isAnimating, setIsAnimating] = useState<
-    "right" | "left" | "refresh" | null
-  >(null);
-  const [coords, setCoords] = useState<[number, number]>([0, 0]);
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(
-    null
+  const { setPoints } = useContext(PointsContext);
+ 
+  // работаем ТОЛЬКО с тем, что пришло с главной
+  const placesToUse = useMemo(
+    () => (initialPlaces && initialPlaces.length > 0 ? initialPlaces : []),
+    [initialPlaces]
   );
-  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(
-    null
-  );
-  const [cardPosition, setCardPosition] = useState({ x: 0, y: 0 });
-
-  const [yesPlaces, setYesPlaces] = useState<IPlace[]>([]);
-  const [noPlaces, setNoPlaces] = useState<IPlace[]>([]);
-  const [places, setPlaces] = useState<IPlace[]>(initialPlaces);
-
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCoords([position.coords.latitude, position.coords.longitude]);
-      },
-      (err) => console.log(err)
-    );
-  }, []);
-
-  const handleSwipe = (direction: "left" | "right" | "refresh") => {
-    if (isAnimating || places.length === 0) return;
-
-    setIsAnimating(direction);
-
-    setTimeout(() => {
-      let newYesPlaces: IPlace[] = [];
-      if (direction === "left") {
-        setNoPlaces(Array.from(new Set([...noPlaces, currentPlace])));
-        if (places.length > 1) {
-          setPlaces(places.filter((place) => place._id !== currentPlace._id));
-        }
-      } else if (direction === "right") {
-        newYesPlaces = Array.from(new Set([...yesPlaces, currentPlace]));
-        setYesPlaces(newYesPlaces);
-        if (places.length > 1) {
-          setPlaces(places.filter((place) => place._id !== currentPlace._id));
-        }
-      } else if (direction === "refresh") {
-        setPlaces(places.sort(() => 0.5 - Math.random()));
-      }
-
-      if (direction !== "refresh" && places.length === 1) {
-        router.push(
-          "/map?route=" + newYesPlaces.map((place) => place._id).join(";")
-        );
-      }
-      setIsAnimating(null);
-      setCardPosition({ x: 0, y: 0 });
-    }, 500);
+ 
+  const [index, setIndex] = useState(0);
+  const [selected, setSelected] = useState<IPlace[]>([]);
+ 
+  const current = placesToUse[index];
+  const isFinished = index >= placesToUse.length;
+ 
+  const handleSkip = () => {
+    setIndex((prev) => prev + 1);
   };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart({
-      x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY,
-    });
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStart) return;
-
-    const touchCurrent = {
-      x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY,
-    };
-
-    // Calculate movement for animation
-    const diffX = touchCurrent.x - touchStart.x;
-    const diffY = touchCurrent.y - touchStart.y;
-
-    // Определяем, по какой оси идет движение
-    const isHorizontalSwipe = Math.abs(diffX) > Math.abs(diffY);
-
-    // Ограничиваем движение только по одной оси
-    if (isHorizontalSwipe) {
-      setCardPosition({ x: diffX, y: 0 });
-    } else {
-      setCardPosition({ x: 0, y: diffY });
+ 
+  const handleLike = () => {
+    if (current) {
+      setSelected((prev) => [...prev, current]);
     }
-
-    setTouchEnd(touchCurrent);
+    setIndex((prev) => prev + 1);
   };
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-
-    const diffX = touchEnd.x - touchStart.x;
-    const diffY = touchEnd.y - touchStart.y;
-
-    // Minimum swipe distance
-    const minSwipeDistance = 50;
-
-    // Определяем, по какой оси идет движение
-    const isHorizontalSwipe = Math.abs(diffX) > Math.abs(diffY);
-
-    if (isHorizontalSwipe) {
-      // Горизонтальный свайп
-      if (Math.abs(diffX) > minSwipeDistance) {
-        if (diffX > 0) {
-          handleSwipe("right");
-        } else {
-          handleSwipe("left");
-        }
-      } else {
-        // Reset position if swipe wasn't long enough
-        setCardPosition({ x: 0, y: 0 });
-      }
+ 
+  const handleFinish = () => {
+    const finalPlaces = selected.length > 0 ? selected : placesToUse;
+ 
+    if (finalPlaces.length > 0) {
+      setPoints(finalPlaces);   // кидаем точки в контекст
+      router.push("/map");      // идём на карту
     } else {
-      // Вертикальный свайп - ТОЛЬКО ВВЕРХ для refresh
-      if (diffY < 0 && Math.abs(diffY) > minSwipeDistance) {
-        // Только свайп вверх
-        handleSwipe("refresh");
-      } else {
-        // Игнорируем свайп вниз и короткие свайпы, просто сбрасываем позицию
-        setCardPosition({ x: 0, y: 0 });
-      }
+      setStep(0);               // вообще ничего не выбрали → назад к категориям
     }
-
-    setTouchStart(null);
-    setTouchEnd(null);
   };
-
-  if (places.length === 0) {
+ 
+  // если по выбранным тегам мест нет вообще
+  if (!placesToUse || placesToUse.length === 0) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        Загрузка...
+      <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-5">
+        <p className="text-sm text-neutral-600 text-center">
+          По выбранным категориям пока нет мест.
+        </p>
+        <button
+          className="px-4 py-2 rounded-xl bg-pale-orange text-white text-sm font-medium"
+          onClick={() => setStep(0)}
+        >
+          Выбрать другие категории
+        </button>
       </div>
     );
   }
-
-  const currentPlace = places[0];
-
-  const distance = useMemo(() => {
-    if (coords[0] !== 0 && coords[1] !== 0 && currentPlace) {
-      const currentPlace = places[0];
-      return calculateDistance(
-        coords[0],
-        coords[1],
-        currentPlace.coordinates.lat,
-        currentPlace.coordinates.lng
-      ).toFixed(1);
-    } else {
-      return "?";
-    }
-  }, [coords]);
-
-  return (
-    <div className="w-full flex flex-col h-full mb-14">
-      <header className="flex justify-between items-center w-full gap-12 text-lg px-5">
-        <div
-          className="flex gap-2 items-center cursor-pointer"
+ 
+  // все посмотрели → предлагаем построить маршрут
+  if (isFinished) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-5">
+        <p className="text-sm text-neutral-700 text-center">
+          Маршрут готов: {selected.length || placesToUse.length} мест.
+        </p>
+        <button
+          className="px-4 py-2 rounded-xl bg-pale-orange text-white text-sm font-medium"
+          onClick={handleFinish}
+        >
+          Показать маршрут на карте
+        </button>
+        <button
+          className="px-3 py-2 text-xs text-neutral-500 underline"
           onClick={() => setStep(0)}
         >
-          <ChevronLeft className="size-6" />
-          <span>Назад</span>
-        </div>
-        {/* link to map */}
-        <div
-          className="flex gap-2 items-center cursor-pointer text-pale-orange"
-          onClick={() => {
-            router.push(
-              "/map?route=" + yesPlaces.map((place) => place._id).join(";")
-            );
-          }}
-        >
-          <span>Готово</span>
-          <ChevronRight className="size-6" />
-        </div>
-      </header>
-      <div className="relative w-11/12 flex-1 m-4 rounded-2xl overflow-hidden shadow-xl">
-        <div
-          className={`card-${
-            places.length === 1 ? "end-" : "" + isAnimating
-          } relative z-10 flex flex-col justify-end w-full h-full p-6 text-light-white max-w-screen bg-cover`}
-          style={{
-            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 1)), url(${currentPlace?.image})`,
-            transform: `translate(${cardPosition.x}px, ${cardPosition.y}px)`,
-            transition: touchStart ? "none" : "transform 0.2s ease",
-          }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        >
-          <button
-            onClick={() => handleSwipe("refresh")}
-            className={`p-3 rounded-full bg-gray-200 flex items-center justify-center shadow-lg hover:bg-gray-300 transition-colors mx-auto z-10 absolute top-5 right-5 ${
-              places.length === 1 ? "opacity-0" : ""
-            }`}
-            aria-label="Обновить"
-          >
-            <Repeat className="size-6 text-light-black" />
-          </button>
-          <div className="mb-2">
-            <h2 className="text-2xl w-full font-bold mb-2 max-h-5/6">
-              {currentPlace?.name}
-            </h2>
-          </div>
-          <div className="flex flex-col gap-2 text-base mb-24">
-            <div className="flex items-center gap-2">
-              <FlagTriangleLeft className="size-8" />
-              <p>{distance} км от меня</p>
+          Выбрать категории заново
+        </button>
+      </div>
+    );
+  }
+ 
+  // основной экран выбора
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-between p-5 pb-28">
+      <div className="w-full flex justify-between text-xs text-neutral-500 mb-3">
+        <span>Выбрано: {selected.length}</span>
+        <span>
+          {index + 1} / {placesToUse.length}
+        </span>
+      </div>
+ 
+      <div className="w-full flex-1 flex items-center justify-center">
+        {current && (
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col">
+            <div className="h-52 w-full relative">
+              <img
+                src={current.image}
+                alt={current.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="p-4 flex flex-col gap-2">
+              <h2 className="font-semibold text-lg">{current.name}</h2>
+              {current.address && (
+                <p className="text-xs text-neutral-500">{current.address}</p>
+              )}
+              {current.description && (
+                <p className="text-sm text-neutral-700 line-clamp-3">
+                  {current.description}
+                </p>
+              )}
+              {current.tags && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {current.tags.map((t) => (
+                    <span
+                      key={t}
+                      className="px-2 py-1 rounded-full bg-orange-50 text-[10px] text-pale-orange"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-          <div className="relative flex justify-center items-center p-6">
-            <button
-              onClick={() => handleSwipe("left")}
-              className="w-36 h-36 rounded-full bg-neutral-500 backdrop-blur-2xl flex items-center justify-center shadow-lg transition-colors text-xl font-medium absolute -bottom-10 -left-10 rounded-bl-2xl"
-              style={{ boxShadow: "inset 5px 5px 10px white" }}
-              aria-label="Не иду"
-            >
-              Не иду
-            </button>
-            <button
-              onClick={() => handleSwipe("right")}
-              className="w-36 h-36 rounded-full bg-pale-orange backdrop-blur-2xl flex items-center justify-center shadow-lg transition-colors text-xl font-medium absolute -bottom-10 -right-10 rounded-br-2xl"
-              style={{ boxShadow: "inset 5px 5px 10px white" }}
-              aria-label="Иду"
-            >
-              Иду
-            </button>
-          </div>
-        </div>
-
-        {/* Анимация свайпа */}
-        {isAnimating && (
-          <div className="absolute inset-0 bg-light-white/20 animate-pulse" />
         )}
       </div>
-      <div className="w-full text-center flex justify-between items-center px-5">
-        <span>Выбрано: {yesPlaces.length}</span>{" "}
-        <span>Осталось: {places.length}</span>
+ 
+      <div className="w-full flex gap-3 mt-4">
+        <button
+          className="flex-1 py-3 rounded-2xl bg-neutral-200 text-neutral-700 text-sm font-medium"
+          onClick={handleSkip}
+        >
+          Пропустить
+        </button>
+        <button
+          className="flex-1 py-3 rounded-2xl bg-pale-orange text-white text-sm font-medium"
+          onClick={handleLike}
+        >
+          В маршрут
+        </button>
       </div>
+ 
+      {/* Кнопка “Готово” внизу, чтобы можно было закончить раньше */}
+      <button
+        className="mt-4 w-full py-2 rounded-xl border border-pale-orange text-pale-orange text-xs font-medium"
+        onClick={handleFinish}
+      >
+        Закончить выбор и построить маршрут
+      </button>
     </div>
   );
-};
-
-export default PlaceTinder;
+}
